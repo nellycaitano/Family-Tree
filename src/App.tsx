@@ -2,57 +2,86 @@ import { useState } from 'react'
 import FamilyTreeCanvas from './components/tree/FamilyTreeCanvas'
 import Modal from './components/ui/Modal'
 import PersonForm from './components/forms/PersonForm'
-import type { Person } from './domain/models/Person'
-import { FaUserPlus, FaUserTie, FaChild } from 'react-icons/fa'
+import type { Person,FamilyEdge } from './domain/models/Person'
+import { FaUserPlus, FaUserTie, FaChild, FaHeart } from 'react-icons/fa'
 import { v4 as uuid } from 'uuid'
 
-type ModalMode = 'root' | 'parent' | 'child'
+type ModalMode = 'root' | 'parent' | 'child' | 'conjoint'
 
 function App() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ModalMode>('root')
- const [persons, setPersons] = useState<Person[]>(() => {
-  const stored = localStorage.getItem('familyTreePersons')
-  return stored ? JSON.parse(stored) : []
-})
+  
+  const [persons, setPersons] = useState<Person[]>(() => {
+    const stored = localStorage.getItem('familyTreePersons')
+    return stored ? JSON.parse(stored) : []
+  })
 
-const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() => {
-  const stored = localStorage.getItem('familyTreeEdges')
-  return stored ? JSON.parse(stored) : []
-})
+  const [edges, setEdges] = useState<FamilyEdge[]>(() => {
+    const stored = localStorage.getItem('familyTreeEdges')
+    if (stored) {
+      const oldEdges = JSON.parse(stored)
+      // Migration depuis l'ancien format
+      if (oldEdges.length > 0 && !oldEdges[0].type) {
+        return oldEdges.map((e: { parentId: string; childId: string }) => ({
+          id: uuid(),
+          sourceId: e.parentId,
+          targetId: e.childId,
+          type: 'parent-child' as const,
+        }))
+      }
+      return oldEdges
+    }
+    return []
+  })
+
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null)
 
-  const updateLocalStorage = (newPersons: Person[], newEdges: Array<{ parentId: string; childId: string }>) => {
-  localStorage.setItem('familyTreePersons', JSON.stringify(newPersons))
-  localStorage.setItem('familyTreeEdges', JSON.stringify(newEdges))
+  const updateLocalStorage = (newPersons: Person[], newEdges: FamilyEdge[]) => {
+    localStorage.setItem('familyTreePersons', JSON.stringify(newPersons))
+    localStorage.setItem('familyTreeEdges', JSON.stringify(newEdges))
   }
 
   const handleAddPerson = (data: { name: string; firstNames: string; gender: 'M' | 'F' | 'other'; birthDate?: string }) => {
-  const newPerson: Person = {
-    id: uuid(),
-     name: data.name,
-     firstNames: data.firstNames,
-     gender: data.gender,
-     birthDate: data.birthDate,
+    const newPerson: Person = {
+      id: uuid(),
+      name: data.name,
+      firstNames: data.firstNames,
+      gender: data.gender,
+      birthDate: data.birthDate,
+    }
+
+    const newPersons = [...persons, newPerson]
+    const newEdges = [...edges]
+
+    if (modalMode === 'parent' && selectedPersonId) {
+      newEdges.push({
+        id: uuid(),
+        sourceId: newPerson.id,
+        targetId: selectedPersonId,
+        type: 'parent-child',
+      })
+    } else if (modalMode === 'child' && selectedPersonId) {
+      newEdges.push({
+        id: uuid(),
+        sourceId: selectedPersonId,
+        targetId: newPerson.id,
+        type: 'parent-child',
+      })
+    } else if (modalMode === 'conjoint' && selectedPersonId) {
+      newEdges.push({
+        id: uuid(),
+        sourceId: selectedPersonId,
+        targetId: newPerson.id,
+        type: 'conjoint',
+      })
+    }
+
+    setPersons(newPersons)
+    setEdges(newEdges)
+    updateLocalStorage(newPersons, newEdges)
+    setIsModalOpen(false)
   }
-
-  const newPersons = [...persons, newPerson]
-  const newEdges = [...edges]
-
-  if (modalMode === 'parent' && selectedPersonId) {
-    newEdges.push({ parentId: newPerson.id, childId: selectedPersonId })
-  } else if (modalMode === 'child' && selectedPersonId) {
-    newEdges.push({ parentId: selectedPersonId, childId: newPerson.id })
-  }
-
-  setPersons(newPersons)
-  setEdges(newEdges)
-
-  updateLocalStorage(newPersons, newEdges)
-
-  setIsModalOpen(false)
-}
-
 
   return (
     <div className="h-screen w-screen bg-gray-50 flex flex-col">
@@ -77,10 +106,10 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
           </button>
 
           <div className="mt-6 text-sm text-gray-500">
-            Sélectionnez une personne pour ajouter un parent ou un enfant.
+            Sélectionnez une personne pour ajouter un parent, un enfant ou un conjoint.
           </div>
 
-          {/* Ajouter parent / enfant */}
+          {/* Ajouter parent / enfant / conjoint */}
           {selectedPersonId && (
             <div className="mt-4 flex flex-col gap-2">
               <button
@@ -102,19 +131,28 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
               >
                 <FaChild /> Ajouter un enfant
               </button>
+
+              <button
+                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 transition"
+                onClick={() => {
+                  setModalMode('conjoint')
+                  setIsModalOpen(true)
+                }}
+              >
+                <FaHeart /> Ajouter un conjoint
+              </button>
             </div>
           )}
         </aside>
 
-
         {/* Tree canvas */}
         <main className="flex-1 bg-gray-100">
-         <FamilyTreeCanvas
-          persons={persons}
-          edges={edges}
-          selectedPersonId={selectedPersonId}
-          onSelectPerson={(id) => setSelectedPersonId((prev) => (prev === id ? null : id))}
-        />
+          <FamilyTreeCanvas
+            persons={persons}
+            edges={edges}
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={(id) => setSelectedPersonId((prev) => (prev === id ? null : id))}
+          />
         </main>
       </div>
 
@@ -126,7 +164,9 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
             ? 'Ajouter une personne'
             : modalMode === 'parent'
             ? 'Ajouter un parent'
-            : 'Ajouter un enfant'
+            : modalMode === 'child'
+            ? 'Ajouter un enfant'
+            : 'Ajouter un conjoint'
         }
         onClose={() => setIsModalOpen(false)}
       >

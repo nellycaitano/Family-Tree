@@ -5,8 +5,10 @@ import ReactFlow, {
   type Edge,
 } from 'reactflow'
 import PersonNode from './PersonNode'
-import type { Person } from '../../domain/models/Person'
-import { calculateGenerations } from '../../domain/services/treeBuilder'
+import type { Person,FamilyEdge } from '../../domain/models/Person'
+
+import { calculateLayout } from '../../domain/services/treeBuilder'
+import { getRelations } from '../../domain/services/relationService' 
 
 const nodeTypes = {
   person: PersonNode,
@@ -14,39 +16,22 @@ const nodeTypes = {
 
 type Props = {
   readonly persons: Person[]
-  readonly edges: Array<{ parentId: string; childId: string }>
+  readonly edges: FamilyEdge[]
   readonly selectedPersonId: string | null
   readonly onSelectPerson?: (id: string) => void
 }
 
 export default function FamilyTreeCanvas({ persons, edges, selectedPersonId, onSelectPerson }: Props) {
-  const generations = calculateGenerations(persons, edges)
-
-  // Regrouper les personnes par génération pour le x
-  const genGroups: Record<number, string[]> = {}
-  persons.forEach((p) => {
-    const gen = generations[p.id] ?? 0 // fallback à 0 si undefined
-    if (!genGroups[gen]) genGroups[gen] = []
-    genGroups[gen].push(p.id)
-  })
-
-  // Compteur d'index horizontal par génération
-  const genXCount: Record<number, number> = {}
+  const layout = calculateLayout(persons, edges)
 
   const nodes = persons.map((person) => {
-    const gen = generations[person.id] ?? 0
-    const indexInGen = genXCount[gen] ?? 0
-    genXCount[gen] = indexInGen + 1
-    const totalInGen = genGroups[gen].length
+    const position = layout[person.id] || { x: 0, y: 0 }
+    const relations = getRelations(person.id, persons, edges)
 
     return {
       id: person.id,
       type: 'person',
-      position: {
-        // Centre chaque génération horizontalement
-        x: (indexInGen - (totalInGen - 1) / 2) * 220,
-        y: gen * 180,
-      },
+      position: { x: position.x, y: position.y },
       data: {
         id: person.id,
         name: `${person.firstNames} ${person.name}`,
@@ -56,16 +41,32 @@ export default function FamilyTreeCanvas({ persons, edges, selectedPersonId, onS
         birthDate: person.birthDate,
         isSelected: person.id === selectedPersonId,
         onClick: onSelectPerson,
+        relations,
       },
     }
   })
 
-  const rfEdges: Edge[] = edges.map((e) => ({
-    id: `${e.parentId}-${e.childId}`,
-    source: e.parentId,
-    target: e.childId,
-    type: 'smoothstep',
-  }))
+  const rfEdges: Edge[] = edges.map((e) => {
+    // Style différent selon le type
+    if (e.type === 'conjoint') {
+      return {
+        id: e.id,
+        source: e.sourceId,
+        target: e.targetId,
+        type: 'straight',
+        style: { stroke: '#ec4899', strokeWidth: 2 }, // Rose pour conjoints
+        animated: false,
+      }
+    }
+
+    return {
+      id: e.id,
+      source: e.sourceId,
+      target: e.targetId,
+      type: 'smoothstep',
+      style: { stroke: '#6b7280', strokeWidth: 1.5 },
+    }
+  })
 
   return (
     <div className="h-full w-full">
@@ -77,3 +78,4 @@ export default function FamilyTreeCanvas({ persons, edges, selectedPersonId, onS
     </div>
   )
 }
+
