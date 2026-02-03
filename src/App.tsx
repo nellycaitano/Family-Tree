@@ -3,6 +3,7 @@ import FamilyTreeCanvas from './components/tree/FamilyTreeCanvas'
 import Modal from './components/ui/Modal'
 import PersonForm from './components/forms/PersonForm'
 import type { Person } from './domain/models/Person'
+import { FaUserPlus, FaUserTie, FaChild } from 'react-icons/fa'
 import { v4 as uuid } from 'uuid'
 
 type ModalMode = 'root' | 'parent' | 'child'
@@ -26,11 +27,13 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
   localStorage.setItem('familyTreeEdges', JSON.stringify(newEdges))
   }
 
- const handleAddPerson = (data: { name: string; firstNames: string }) => {
+  const handleAddPerson = (data: { name: string; firstNames: string; gender: 'M' | 'F' | 'other'; birthDate?: string }) => {
   const newPerson: Person = {
     id: uuid(),
-    name: data.name,
-    firstNames: data.firstNames,
+     name: data.name,
+     firstNames: data.firstNames,
+     gender: data.gender,
+     birthDate: data.birthDate,
   }
 
   const newPersons = [...persons, newPerson]
@@ -61,16 +64,16 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
-        <aside className="w-72 border-r bg-white p-4">
+        <aside className="w-72 border-r bg-white p-4 flex flex-col">
           {/* Ajouter une racine */}
           <button
-            className="w-full rounded-lg bg-black text-white py-2"
+            className="flex items-center justify-center gap-2 w-full rounded-lg bg-black text-white py-2 hover:bg-gray-800 transition"
             onClick={() => {
               setModalMode('root')
               setIsModalOpen(true)
             }}
           >
-            Ajouter une personne
+            <FaUserPlus /> Ajouter une personne
           </button>
 
           <div className="mt-6 text-sm text-gray-500">
@@ -79,37 +82,39 @@ const [edges, setEdges] = useState<{ parentId: string; childId: string }[]>(() =
 
           {/* Ajouter parent / enfant */}
           {selectedPersonId && (
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 flex flex-col gap-2">
               <button
-                className="w-full py-2 rounded-lg bg-blue-600 text-white"
+                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-400 text-white hover:bg-purple-500 transition"
                 onClick={() => {
                   setModalMode('parent')
                   setIsModalOpen(true)
                 }}
               >
-                Ajouter un parent
+                <FaUserTie /> Ajouter un parent
               </button>
 
               <button
-                className="w-full py-2 rounded-lg bg-green-600 text-white"
+                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-[#81A936] text-white hover:bg-lime-600 transition"
                 onClick={() => {
                   setModalMode('child')
                   setIsModalOpen(true)
                 }}
               >
-                Ajouter un enfant
+                <FaChild /> Ajouter un enfant
               </button>
             </div>
           )}
         </aside>
 
+
         {/* Tree canvas */}
         <main className="flex-1 bg-gray-100">
-          <FamilyTreeCanvas
-            persons={persons}
-            edges={edges}
-            onSelectPerson={(id) => setSelectedPersonId(id)}
-          />
+         <FamilyTreeCanvas
+          persons={persons}
+          edges={edges}
+          selectedPersonId={selectedPersonId}
+          onSelectPerson={(id) => setSelectedPersonId((prev) => (prev === id ? null : id))}
+        />
         </main>
       </div>
 

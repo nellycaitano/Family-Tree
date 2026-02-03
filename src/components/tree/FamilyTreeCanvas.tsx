@@ -15,10 +15,11 @@ const nodeTypes = {
 type Props = {
   readonly persons: Person[]
   readonly edges: Array<{ parentId: string; childId: string }>
+  readonly selectedPersonId: string | null
   readonly onSelectPerson?: (id: string) => void
 }
 
-export default function FamilyTreeCanvas({ persons, edges, onSelectPerson }: Props) {
+export default function FamilyTreeCanvas({ persons, edges, selectedPersonId, onSelectPerson }: Props) {
   const generations = calculateGenerations(persons, edges)
 
   // Regrouper les personnes par génération pour le x
@@ -49,6 +50,11 @@ export default function FamilyTreeCanvas({ persons, edges, onSelectPerson }: Pro
       data: {
         id: person.id,
         name: `${person.firstNames} ${person.name}`,
+        firstNames: person.firstNames,
+        lastName: person.name,
+        gender: person.gender,
+        birthDate: person.birthDate,
+        isSelected: person.id === selectedPersonId,
         onClick: onSelectPerson,
       },
     }
