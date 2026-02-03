@@ -1,4 +1,4 @@
-import { Person } from '../models/Person'
+import type { Person } from '../models/Person'
 
 type EdgeData = { parentId: string; childId: string }
 
