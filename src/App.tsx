@@ -8,6 +8,11 @@ import { v4 as uuid } from 'uuid'
 
 type ModalMode = 'root' | 'parent' | 'child' | 'conjoint'
 
+type OldEdgeFormat = {
+  parentId: string
+  childId: string
+}
+
 function App() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ModalMode>('root')
@@ -23,7 +28,7 @@ function App() {
       const oldEdges = JSON.parse(stored)
       // Migration depuis l'ancien format
       if (oldEdges.length > 0 && !oldEdges[0].type) {
-        return oldEdges.map((e: { parentId: string; childId: string }) => ({
+        return oldEdges.map((e: OldEdgeFormat) => ({
           id: uuid(),
           sourceId: e.parentId,
           targetId: e.childId,
@@ -62,12 +67,33 @@ function App() {
         type: 'parent-child',
       })
     } else if (modalMode === 'child' && selectedPersonId) {
+      // Ajouter l'edge du parent sélectionné vers l'enfant
       newEdges.push({
         id: uuid(),
         sourceId: selectedPersonId,
         targetId: newPerson.id,
         type: 'parent-child',
       })
+
+      // Vérifier si le parent a un conjoint
+      const conjointEdge = edges.find(
+        e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
+      )
+
+      if (conjointEdge) {
+        // Trouver l'ID du conjoint
+        const conjointId = conjointEdge.sourceId === selectedPersonId 
+          ? conjointEdge.targetId 
+          : conjointEdge.sourceId
+
+        // Ajouter aussi un edge du conjoint vers l'enfant
+        newEdges.push({
+          id: uuid(),
+          sourceId: conjointId,
+          targetId: newPerson.id,
+          type: 'parent-child',
+        })
+      }
     } else if (modalMode === 'conjoint' && selectedPersonId) {
       newEdges.push({
         id: uuid(),
@@ -107,6 +133,10 @@ function App() {
 
           <div className="mt-6 text-sm text-gray-500">
             Sélectionnez une personne pour ajouter un parent, un enfant ou un conjoint.
+          </div>
+
+          <div className="mt-6 text-sm text-gray-500">
+            Survolez sur une personne pour voir ses informations.
           </div>
 
           {/* Ajouter parent / enfant / conjoint */}
@@ -170,6 +200,14 @@ function App() {
         }
         onClose={() => setIsModalOpen(false)}
       >
+        {/* Message info si ajout enfant avec conjoint détecté */}
+        {modalMode === 'child' && selectedPersonId && edges.find(
+          e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
+        ) && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+            ℹ️ Les deux parents seront automatiquement liés à cet enfant.
+          </div>
+        )}
         <PersonForm onSubmit={handleAddPerson} />
       </Modal>
     </div>

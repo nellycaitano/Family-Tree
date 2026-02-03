@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Handle, Position } from 'reactflow'
-import type { Relation } from '../../domain/models/Person' 
+import type { Relation } from '../../domain/models/Person'
 
 type PersonNodeData = {
   id: string
