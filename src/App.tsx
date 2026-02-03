@@ -5,13 +5,14 @@ import PersonForm from './components/forms/PersonForm'
 import type { Person,FamilyEdge } from './domain/models/Person'
 import { FaUserPlus, FaUserTie, FaChild, FaHeart } from 'react-icons/fa'
 import { v4 as uuid } from 'uuid'
+import {
+  validateAddParent,
+  validateAddChild,
+  validateAddConjoint,
+  validateNoDuplicate,
+} from './domain/services/validationService'
 
 type ModalMode = 'root' | 'parent' | 'child' | 'conjoint'
-
-type OldEdgeFormat = {
-  parentId: string
-  childId: string
-}
 
 function App() {
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -28,7 +29,7 @@ function App() {
       const oldEdges = JSON.parse(stored)
       // Migration depuis l'ancien format
       if (oldEdges.length > 0 && !oldEdges[0].type) {
-        return oldEdges.map((e: OldEdgeFormat) => ({
+        return oldEdges.map((e: { parentId: string; childId: string }) => ({
           id: uuid(),
           sourceId: e.parentId,
           targetId: e.childId,
@@ -41,6 +42,7 @@ function App() {
   })
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const updateLocalStorage = (newPersons: Person[], newEdges: FamilyEdge[]) => {
     localStorage.setItem('familyTreePersons', JSON.stringify(newPersons))
@@ -48,12 +50,43 @@ function App() {
   }
 
   const handleAddPerson = (data: { name: string; firstNames: string; gender: 'M' | 'F' | 'other'; birthDate?: string }) => {
+    // Réinitialiser l'erreur
+    setValidationError(null)
+
     const newPerson: Person = {
       id: uuid(),
       name: data.name,
       firstNames: data.firstNames,
       gender: data.gender,
       birthDate: data.birthDate,
+    }
+
+    // VALIDATIONS
+    if (modalMode === 'parent' && selectedPersonId) {
+      const validation = validateAddParent(selectedPersonId, data.birthDate, persons, edges)
+      if (!validation.isValid) {
+        setValidationError(validation.errorMessage || "Erreur de validation")
+        return
+      }
+
+      // Vérifier les doublons
+      const duplicateCheck = validateNoDuplicate(newPerson.id, selectedPersonId, 'parent-child', edges)
+      if (!duplicateCheck.isValid) {
+        setValidationError(duplicateCheck.errorMessage || "Cette relation existe déjà")
+        return
+      }
+    } else if (modalMode === 'child' && selectedPersonId) {
+      const validation = validateAddChild(selectedPersonId, data.birthDate, persons)
+      if (!validation.isValid) {
+        setValidationError(validation.errorMessage || "Erreur de validation")
+        return
+      }
+    } else if (modalMode === 'conjoint' && selectedPersonId) {
+      const validation = validateAddConjoint(selectedPersonId, newPerson.id, persons, edges)
+      if (!validation.isValid) {
+        setValidationError(validation.errorMessage || "Erreur de validation")
+        return
+      }
     }
 
     const newPersons = [...persons, newPerson]
@@ -75,13 +108,12 @@ function App() {
         type: 'parent-child',
       })
 
-      // Vérifier si le parent a un conjoint
+      // 🎯 Vérifier si le parent a un conjoint
       const conjointEdge = edges.find(
         e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
       )
 
       if (conjointEdge) {
-        // Trouver l'ID du conjoint
         const conjointId = conjointEdge.sourceId === selectedPersonId 
           ? conjointEdge.targetId 
           : conjointEdge.sourceId
@@ -107,6 +139,7 @@ function App() {
     setEdges(newEdges)
     updateLocalStorage(newPersons, newEdges)
     setIsModalOpen(false)
+    setValidationError(null)
   }
 
   return (
@@ -135,42 +168,70 @@ function App() {
             Sélectionnez une personne pour ajouter un parent, un enfant ou un conjoint.
           </div>
 
-          <div className="mt-6 text-sm text-gray-500">
-            Survolez sur une personne pour voir ses informations.
-          </div>
-
           {/* Ajouter parent / enfant / conjoint */}
           {selectedPersonId && (
             <div className="mt-4 flex flex-col gap-2">
-              <button
-                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-400 text-white hover:bg-purple-500 transition"
-                onClick={() => {
-                  setModalMode('parent')
-                  setIsModalOpen(true)
-                }}
-              >
-                <FaUserTie /> Ajouter un parent
-              </button>
+              {(() => {
+                const existingParents = edges.filter(
+                  e => e.type === 'parent-child' && e.targetId === selectedPersonId
+                )
+                const hasMaxParents = existingParents.length >= 2
 
-              <button
-                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-[#81A936] text-white hover:bg-lime-600 transition"
-                onClick={() => {
-                  setModalMode('child')
-                  setIsModalOpen(true)
-                }}
-              >
-                <FaChild /> Ajouter un enfant
-              </button>
+                const existingConjoint = edges.find(
+                  e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
+                )
+                const hasConjoint = !!existingConjoint
 
-              <button
-                className="flex items-center justify-center gap-2 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 transition"
-                onClick={() => {
-                  setModalMode('conjoint')
-                  setIsModalOpen(true)
-                }}
-              >
-                <FaHeart /> Ajouter un conjoint
-              </button>
+                return (
+                  <>
+                    <button
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg transition ${
+                        hasMaxParents
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-purple-400 text-white hover:bg-purple-500'
+                      }`}
+                      onClick={() => {
+                        if (!hasMaxParents) {
+                          setModalMode('parent')
+                          setIsModalOpen(true)
+                        }
+                      }}
+                      disabled={hasMaxParents}
+                      title={hasMaxParents ? "Cette personne a déjà 2 parents" : ""}
+                    >
+                      <FaUserTie /> Ajouter un parent
+                    </button>
+
+                    <button
+                      className="flex items-center justify-center gap-2 py-2 rounded-lg bg-[#81A936] text-white hover:bg-lime-600 transition"
+                      onClick={() => {
+                        setModalMode('child')
+                        setIsModalOpen(true)
+                      }}
+                    >
+                      <FaChild /> Ajouter un enfant
+                    </button>
+
+                    <button
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg transition ${
+                        hasConjoint
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-pink-500 text-white hover:bg-pink-600'
+                      }`}
+                      onClick={() => {
+                        if (!hasConjoint) {
+                          setModalMode('conjoint')
+                          setIsModalOpen(true)
+                        }
+                      }}
+                      disabled={hasConjoint}
+                      title={hasConjoint ? "Cette personne a déjà un conjoint" : ""}
+                    >
+                      <FaHeart /> Ajouter un conjoint
+                    </button>
+                  </>
+                )
+              })()}
             </div>
           )}
         </aside>
@@ -198,8 +259,18 @@ function App() {
             ? 'Ajouter un enfant'
             : 'Ajouter un conjoint'
         }
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false)
+          setValidationError(null)
+        }}
       >
+        {/* Message d'erreur de validation */}
+        {validationError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+            ⚠️ {validationError}
+          </div>
+        )}
+
         {/* Message info si ajout enfant avec conjoint détecté */}
         {modalMode === 'child' && selectedPersonId && edges.find(
           e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
