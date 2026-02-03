@@ -108,7 +108,7 @@ function App() {
         type: 'parent-child',
       })
 
-      // 🎯 Vérifier si le parent a un conjoint
+      // Vérifier si le parent a un conjoint
       const conjointEdge = edges.find(
         e => e.type === 'conjoint' && (e.sourceId === selectedPersonId || e.targetId === selectedPersonId)
       )
@@ -166,6 +166,10 @@ function App() {
 
           <div className="mt-6 text-sm text-gray-500">
             Sélectionnez une personne pour ajouter un parent, un enfant ou un conjoint.
+          </div>
+
+           <div className="mt-6 text-sm text-gray-500">
+            Survolez sur une personne pour voir ses informations.
           </div>
 
           {/* Ajouter parent / enfant / conjoint */}
